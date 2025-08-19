@@ -1,91 +1,67 @@
-  /*import { db } from "../config/firebaseConfig.js";
+import mongoose from "mongoose";
+import bcrypt from "bcryptjs";
+import validator from "validator";
+import crypto from "crypto";
 
-  export class UserModel {
-    constructor() {
-      this.collection = db.collection("Users");
-    }
+const userSchema = new mongoose.Schema(
+  {
+    name: { type: String, trim: true, required: true, minlength: 2, maxlength: 80 },
+    email: {
+      type: String,
+      unique: true,
+      required: true,
+      lowercase: true,
+      trim: true,
+      validate: [validator.isEmail, "Invalid email"],
+    },
+    password: {
+      type: String,
+      required: true,
+      minlength: 8,
+      select: false, // don't return by default
+    },
+    role: { type: String, enum: ["user", "admin"], default: "user" },
 
-    // Assuming this is in your RideModel.js or a similar service module
-    // Assuming this is in your RideModel.js or a similar service module
-    async createUser(userData) {
-      try {
-        // Add the user data to Firestore collection
-        const docRef = await this.collection.add(userData);
+    // security
+    passwordChangedAt: Date,
+    passwordResetTokenHash: String,
+    passwordResetExpiresAt: Date,
+  },
+  { timestamps: true }
+);
 
-        // Retrieve the created document's data
-        const newUser = await docRef.get();
+// Hash password before save
+userSchema.pre("save", async function (next) {
+  if (!this.isModified("password")) return next();
+  this.password = await bcrypt.hash(this.password, 12);
+  // update passwordChangedAt to invalidate old JWTs when password changes
+  if (!this.isNew) this.passwordChangedAt = Date.now() - 1000;
+  next();
+});
 
-        // Check if the document exists
-        if (!newUser.exists) {
-          throw new Error("Failed to retrieve the created user.");
-        }
+// Compare password
+userSchema.methods.correctPassword = async function (candidate, hashed) {
+  return bcrypt.compare(candidate, hashed);
+};
 
-        // Return the document data along with the generated document ID
-        return { id: docRef.id, ...newUser.data() };
-      } catch (error) {
-        console.error("Error creating user:", error);
-        throw new Error(
-          "The backend did not return a valid object or missing ID for the created user."
-        );
-      }
-    }
+// Check if user changed password after token was issued
+userSchema.methods.changedPasswordAfter = function (jwtIat) {
+  if (!this.passwordChangedAt) return false;
+  const changedTimestamp = parseInt(this.passwordChangedAt.getTime() / 1000, 10);
+  return jwtIat < changedTimestamp;
+};
 
+// Create password reset token (store hashed version)
+userSchema.methods.createPasswordResetToken = function () {
+  const resetToken = crypto.randomBytes(32).toString("hex");
+  const hash = crypto.createHash("sha256").update(resetToken).digest("hex");
 
-    async getUserByEmail(emailuser) {
-      try {
-        if (!emailuser) {
-          throw new Error("Email is required");
-        }
-    
-        const querySnapshot = await this.collection
-          .where("email", "==", emailuser)
-          .limit(1) // 🔒 On limite à un seul résultat par sécurité
-          .get();
-    
-        if (querySnapshot.empty) {
-          throw new Error(`User with email "${emailuser}" not found`);
-        }
-    
-        const userDoc = querySnapshot.docs[0];
-        return { id: userDoc.id, ...userDoc.data() };
-      } catch (error) {
-        console.error("Error fetching user by email:", error.message);
-        throw error;
-      }
-    }
+  this.passwordResetTokenHash = hash;
+  const mins = Number(process.env.PASSWORD_RESET_TOKEN_EXPIRES_MIN || 10);
+  this.passwordResetExpiresAt = Date.now() + mins * 60 * 1000;
 
-    async getUserById(userId) {
-      try {
-        // Query Firestore where the 'id' field matches the userId
-        const querySnapshot = await this.collection
-          .where("id", "==", userId)
-          .get();
+  return resetToken; // send raw token by email
+};
 
-        // Check if any document matches the query
-        if (querySnapshot.empty) {
-          throw new Error("User not found");
-        }
-
-        // Assuming that there should only be one matching document
-        const userDoc = querySnapshot.docs[0];
-
-        // Return the data along with the Firestore document ID
-        return { id: userDoc.id, ...userDoc.data() };
-      } catch (error) {
-        console.error("Error fetching user by attribute 'id':", error);
-        throw error;
-      }
-    }
-
-    async getAllUsers() {
-      const snapshot = await this.collection.get();
-      const users = [];
-      snapshot.forEach((doc) => {
-        users.push({ id: doc.id, ...doc.data() });
-      });
-      return users;
-    }
-  }
-
-  export default new UserModel();
-*/
+const User = mongoose.model("User", userSchema);
+export default User;

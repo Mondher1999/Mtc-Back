@@ -4,27 +4,31 @@ import morgan from "morgan";
 import cors from "cors";
 import dotenv from "dotenv";
 
-import connectDB from "./src/config/db.js";   // <-- add this
-//import userRoutes from "./src/routes/userRoutes.js";
+import connectDB from "./src/config/db.js";
 import courseRoutes from "./src/routes/courseRoutes.js";
-//import livecourseRoutes from "./src/routes/liveCourseRoutes.js";
+import authRoutes from "./src/routes/authRoutes.js";
+import cookieParser from "cookie-parser";
 
-dotenv.config(); // Load .env file
+dotenv.config();
+
 
 const app = express();
 app.use(express.json());
 app.use(morgan("dev"));
-app.use(cors());
+app.use(cors({
+    origin: "http://localhost:3000", // your Next.js frontend
+    credentials: true,               // allow cookies/authorization headers
+  }));
+  
+  app.use(cookieParser());
 
-// Connect to MongoDB
 connectDB();
 
 const server = http.createServer(app);
 
-// Define routes
-//app.use("/users", userRoutes);
+// Routes
+app.use("/auth", authRoutes);
 app.use("/courses", courseRoutes);
-//app.use("/livecourses", livecourseRoutes);
 
 const port = process.env.PORT || 4002;
 server.listen(port, () => console.log(`🚀 Server running on port ${port}`));
