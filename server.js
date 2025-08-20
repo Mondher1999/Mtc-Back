@@ -6,6 +6,8 @@ import dotenv from "dotenv";
 
 import connectDB from "./src/config/db.js";
 import courseRoutes from "./src/routes/courseRoutes.js";
+import livecourseRoutes from "./src/routes/LivecourseRoutes.js"
+
 import authRoutes from "./src/routes/authRoutes.js";
 import cookieParser from "cookie-parser";
 
@@ -27,6 +29,8 @@ connectDB();
 const server = http.createServer(app);
 
 // Routes
+
+app.use("/livecourses", livecourseRoutes);
 app.use("/auth", authRoutes);
 app.use("/courses", courseRoutes);
 

@@ -1,11 +1,14 @@
 import mongoose from "mongoose";
 
 const courseSchema = new mongoose.Schema({
-  title: String,
+  courseName: String,
   description: String,
-  price: Number,
-  category: String,
-  imageUrl: String,
+  videoLink: String, 
+  instructorName: String,
+  duration: String,
+  category  : String,
+  recordingDate: String,
+  selectedStudents: [],
   createdAt: { type: Date, default: Date.now }
 });
 
