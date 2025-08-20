@@ -137,22 +137,29 @@ await user.save();
     // 5️⃣ Send email with credentials
     await sendEmail({
       to: user.email,
-      subject: "Vos identifiants de compte",
+      subject: "Bienvenue sur notre plateforme !",
       text: `
     Bonjour ${user.name},
     
-    Votre compte a été créé avec succès.
+    Nous sommes ravis de vous accueillir sur notre plateforme !
     
-    Email: ${user.email}
-    Mot de passe: ${generatedPassword}
+    Votre compte a été créé avec succès. Voici vos identifiants pour vous connecter et commencer à explorer nos ressources :
     
-    Merci pour votre confiance.
-    `,
+    Email : ${user.email}
+    Mot de passe : ${generatedPassword}
+    
+    Nous vous souhaitons une excellente expérience parmi nous. N'hésitez pas à vous connecter dès maintenant et à découvrir tout ce que notre plateforme a à offrir !
+    
+    Merci de votre confiance,
+    L'équipe de la plateforme
+      `,
       html: `
       <div style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">
         <div style="max-width: 600px; margin: auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); padding: 30px;">
-          <h2 style="color: #2F80ED;">Bonjour ${user.name},</h2>
-          <p style="font-size: 16px; color: #333333;">Votre compte a été créé avec succès.</p>
+          <h2 style="color: #2F80ED; font-size: 24px; margin-bottom: 20px;">Bienvenue ${user.name} ! 🎉</h2>
+          <p style="font-size: 16px; color: #333333; line-height: 1.5;">
+            Nous sommes ravis de vous accueillir sur notre plateforme. Votre compte a été créé avec succès.
+          </p>
           
           <table style="width: 100%; margin: 20px 0; border-collapse: collapse;">
             <tr>
@@ -165,13 +172,44 @@ await user.save();
             </tr>
           </table>
     
-          <p style="font-size: 16px; color: #333333;">Merci pour votre confiance.</p>
+          <p style="font-size: 16px; color: #333333; line-height: 1.5;">
+            Nous vous invitons à vous connecter dès maintenant pour commencer votre expérience et découvrir tout ce que notre plateforme a à offrir.
+          </p>
     
-          <p style="margin-top: 30px; font-size: 14px; color: #999999;">Ceci est un email automatique, merci de ne pas répondre.</p>
+          <a href="https://ta-plateforme.com/login" 
+             style="display: inline-block; padding: 12px 20px; margin: 20px 0; background-color: #2F80ED; color: #fff; text-decoration: none; border-radius: 6px; font-weight: bold;">
+            Se connecter à la plateforme
+          </a>
+    
+          <p style="font-size: 16px; color: #333333;">
+            Merci de votre confiance,<br/>
+            <strong>L'équipe de la plateforme</strong>
+          </p>
+    
+          <p style="margin-top: 30px; font-size: 12px; color: #999;">
+            Ceci est un email automatique, merci de ne pas répondre.
+          </p>
         </div>
       </div>
+    
+      <!-- Responsive styles -->
+      <style>
+        @media only screen and (max-width: 600px) {
+          div[style*="max-width: 600px"] {
+            width: 100% !important;
+            padding: 20px !important;
+          }
+          h2 {
+            font-size: 20px !important;
+          }
+          p, a {
+            font-size: 16px !important;
+          }
+        }
+      </style>
       `,
     });
+    
     
 
     const accessToken = signAccessToken({ id: user._id });
