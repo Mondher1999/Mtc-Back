@@ -2,7 +2,7 @@ import express from "express";
 import {
   addLiveCourse,getLiveCourse,updateLiveCourse,deleteLiveCourse,getAllLiveCourses
  
-} from "../controllers/LiveCourseController.js"
+} from "../controllers/livecourseController.js"
 
 const router = express.Router();
 

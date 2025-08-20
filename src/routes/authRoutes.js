@@ -8,6 +8,9 @@ import {
   updatePassword,
   forgotPassword,
   resetPassword,
+  getStudentsVerified,
+  getTeachers,
+  validateUser,
 } from "../controllers/authController.js";
 import { protect } from "../middlewares/auth.js";
 
@@ -20,6 +23,10 @@ router.post("/refresh", refresh);
 router.post("/forgot-password", forgotPassword);
 router.post("/reset-password", resetPassword);
 router.post("/logout", logout);
+
+router.get("/students-verified", getStudentsVerified);
+router.get("/teachers", getTeachers);
+router.patch("/validate-user/:id", validateUser);
 
 // Protected
 router.get("/me", protect, me);

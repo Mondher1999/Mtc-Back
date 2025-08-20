@@ -39,33 +39,152 @@ const setRefreshCookie = (res, token) => {
 
 /**
  * POST /auth/register
+ * - Automatically generates a password
+ * - Sends it by email to the user
  */
+export const getStudentsVerified = async (req, res) => {
+  try {
+    const students = await User.find({
+      role: "etudiant",
+      formValidated: true,
+      accessValidated: true,
+    }).select("-password -passwordResetTokenHash -passwordResetExpiresAt");
+
+    res.json({ count: students.length, students });
+  } catch (err) {
+    console.error("getStudentsVerified error:", err);
+    res.status(500).json({ error: "Could not fetch verified students" });
+  }
+};
+
+export const validateUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const user = await User.findByIdAndUpdate(
+      id,
+      { formValidated: true, accessValidated: true },
+      { new: true, runValidators: true }
+    ).select("-password -passwordResetTokenHash -passwordResetExpiresAt");
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    res.json({
+      message: "User validated successfully",
+      user,
+    });
+  } catch (err) {
+    console.error("validateUser error:", err);
+    res.status(500).json({ error: "Could not validate user" });
+  }
+};
+
+
+export const getTeachers = async (req, res) => {
+  try {
+    const teachers = await User.find({
+      role: "enseignant",
+    }).select("-password -passwordResetTokenHash -passwordResetExpiresAt");
+
+    res.json({ count: teachers.length, teachers });
+  } catch (err) {
+    console.error("getTeachers error:", err);
+    res.status(500).json({ error: "Could not fetch teachers" });
+  }
+};
+
 export const register = async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { firstName, lastName, telNumber, email, role } = req.body;
 
-    if (!name || !email || !password) {
-      return res.status(400).json({ error: "name, email and password are required" });
+    if (!firstName || !lastName || !email) {
+      return res.status(400).json({ error: "firstName, lastName and email are required" });
     }
 
     const exists = await User.findOne({ email });
     if (exists) return res.status(409).json({ error: "Email already in use" });
 
-    const user = await User.create({ name, email, password, role });
+    // Generate random password
+    const generatedPassword = crypto.randomBytes(6).toString("hex");
+
+    // Définir formValidated et accessValidated selon le rôle
+    let formValidated = false;
+    let accessValidated = false;
+    if (role === "enseignant" || role === "admin") {
+      formValidated = true;
+      accessValidated = true;
+    }
+
+    const user = await User.create({
+      firstName,
+      lastName,
+      telNumber,
+      email,
+      role,
+      name: `${firstName} ${lastName}`,
+      password: generatedPassword,
+      formValidated,
+      accessValidated,
+
+    });
+
+    user.userId = user._id;
+await user.save();
+
+
+    // 5️⃣ Send email with credentials
+    await sendEmail({
+      to: user.email,
+      subject: "Vos identifiants de compte",
+      text: `
+    Bonjour ${user.name},
+    
+    Votre compte a été créé avec succès.
+    
+    Email: ${user.email}
+    Mot de passe: ${generatedPassword}
+    
+    Merci pour votre confiance.
+    `,
+      html: `
+      <div style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">
+        <div style="max-width: 600px; margin: auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); padding: 30px;">
+          <h2 style="color: #2F80ED;">Bonjour ${user.name},</h2>
+          <p style="font-size: 16px; color: #333333;">Votre compte a été créé avec succès.</p>
+          
+          <table style="width: 100%; margin: 20px 0; border-collapse: collapse;">
+            <tr>
+              <td style="font-weight: bold; padding: 8px; background-color: #f2f2f2; width: 120px;">Email :</td>
+              <td style="padding: 8px;">${user.email}</td>
+            </tr>
+            <tr>
+              <td style="font-weight: bold; padding: 8px; background-color: #f2f2f2;">Mot de passe :</td>
+              <td style="padding: 8px;">${generatedPassword}</td>
+            </tr>
+          </table>
+    
+          <p style="font-size: 16px; color: #333333;">Merci pour votre confiance.</p>
+    
+          <p style="margin-top: 30px; font-size: 14px; color: #999999;">Ceci est un email automatique, merci de ne pas répondre.</p>
+        </div>
+      </div>
+      `,
+    });
+    
 
     const accessToken = signAccessToken({ id: user._id });
     const refreshToken = signRefreshToken({ id: user._id });
-
-    // ⬇️ store refresh token in httpOnly cookie
     setRefreshCookie(res, refreshToken);
 
-    // ⬇️ return sanitized user + access token only
-    return res.status(201).json({
+    res.status(201).json({
       user: sanitizeUser(user),
       accessToken,
     });
   } catch (err) {
-    return res.status(500).json({ error: "Registration failed" });
+    console.error("Register error:", err);
+    res.status(500).json({ error: "Registration failed" });
   }
 };
 

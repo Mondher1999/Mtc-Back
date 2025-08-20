@@ -5,30 +5,47 @@ import crypto from "crypto";
 
 const userSchema = new mongoose.Schema(
   {
-    name: { type: String, trim: true, required: true, minlength: 2, maxlength: 80 },
-    email: {
-      type: String,
-      unique: true,
-      required: true,
-      lowercase: true,
-      trim: true,
-      validate: [validator.isEmail, "Invalid email"],
+    firstName: { type: String, trim: true },
+    lastName: { type: String, trim: true },
+    telNumber: { type: String, trim: true },
+
+    name: { type: String, trim: true },
+    email: { type: String, trim: true, lowercase: true, unique: true },
+    password: { type: String, select: false },
+    role: { type: String }, // plus de enum
+
+     // 👇 add this field so Mongoose will store it
+     id: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: function () {
+        return this._id;
+      },
     },
-    password: {
-      type: String,
-      required: true,
-      minlength: 8,
-      select: false, // don't return by default
-    },
-    role: { type: String, enum: ["user", "admin"], default: "user" },
+  
+
+    // Nouveaux champs booléens
+    formValidated: { type: Boolean, default: false },   // validation formulaire
+    accessValidated: { type: Boolean, default: false }, // validation accès
 
     // security
     passwordChangedAt: Date,
     passwordResetTokenHash: String,
     passwordResetExpiresAt: Date,
+
   },
+  
   { timestamps: true }
 );
+
+userSchema.set("toJSON", {
+  virtuals: true,
+  versionKey: false,
+  transform: (doc, ret) => {
+    ret.id = ret._id;   // add id field
+    delete ret._id;     // hide _id
+  }
+});
+
 
 // Hash password before save
 userSchema.pre("save", async function (next) {
