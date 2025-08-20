@@ -19,7 +19,7 @@ app.use(express.json());
 app.use(morgan("dev"));
 const allowedOrigins = [
   "http://localhost:3000",
-  "http://43.154.65.148:3000"
+  "http://43.154.65.148"
 ];
 
 app.use(cors({
