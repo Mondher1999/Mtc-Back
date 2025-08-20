@@ -18,7 +18,7 @@ const app = express();
 app.use(express.json());
 app.use(morgan("dev"));
 app.use(cors({
-    origin: "http://localhost:3000", // your Next.js frontend
+    origin: "http://43.154.65.148", // your Next.js frontend
     credentials: true,               // allow cookies/authorization headers
   }));
   
