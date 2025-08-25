@@ -6,10 +6,12 @@ import {
   deleteCourse,
   getAllCourses,
 } from "../controllers/courseController.js";
+import upload from '../middlewares/upload.js'; // Adjust path as needed
 
 const router = express.Router();
 
-router.post("/courses", addCourse);
+router.post('/courses', upload.single('videoFile'), addCourse);
+
 router.get("/courses", getAllCourses);
 router.get("/courses/:id", getCourse);
 router.patch("/courses/:id", updateCourse);

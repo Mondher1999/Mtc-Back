@@ -14,6 +14,16 @@ const userSchema = new mongoose.Schema(
     password: { type: String, select: false },
     role: { type: String }, // plus de enum
 
+    dateOfBirth: { type: String, default: "" },
+      gender: { type: String, default: "" },
+      address: { type: String, default: "" },
+      motivation: { type: String, default: "" },
+
+      photoId: { type: String }, // File path/URL
+      receipt: { type: String }, // File path/URL
+
+
+
      // 👇 add this field so Mongoose will store it
      id: {
       type: mongoose.Schema.Types.ObjectId,

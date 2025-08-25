@@ -12,7 +12,13 @@ const livecourseSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
   startTimeChina: { type: String }, // heure début en Chine
   endTimeChina: { type: String },   // heure fin en Chine
+
+ 
 });
+
+
+
+
 
 const LiveCourse = mongoose.model("LiveCourse", livecourseSchema);
 

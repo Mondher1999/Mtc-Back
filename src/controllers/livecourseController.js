@@ -1,14 +1,21 @@
 import LiveCourse from "../models/liveCourseModel.js";
-import { liveCourseEmailContent } from "../utils/emailTemplates.js";
+import { liveCourseEmailContent,liveCourseInstructorEmailContent } from "../utils/emailTemplates.js";
 import User from "../models/userModel.js"; // adjust the path to where your User model is
 import { sendEmail } from "../utils/sendEmail.js";
+import mongoose from "mongoose";
+
 // Create course
 export const addLiveCourse = async (req, res) => {
   try {
-    const { date, startTime, endTime, selectedStudents } = req.body;
+    // Remove any _id or id sent by client
+    const { _id, id, ...courseData } = req.body;
 
-    if (!date || !startTime || !endTime) {
-      return res.status(400).json({ error: "Date, startTime and endTime are required" });
+    // Required fields validation
+    const { date, startTime, endTime, selectedStudents, instructorName } = courseData;
+    if (!date || !startTime || !endTime || !instructorName) {
+      return res.status(400).json({
+        error: "Date, startTime, endTime and instructorName are required",
+      });
     }
 
     // Convert to Date object
@@ -16,40 +23,72 @@ export const addLiveCourse = async (req, res) => {
     const [startHour, startMin] = startTime.split(":").map(Number);
     const [endHour, endMin] = endTime.split(":").map(Number);
 
-    // UTC+8 for China
+    // Adjust for UTC+8 (China)
     const startChina = new Date(dateObj);
     startChina.setHours(startHour + 7, startMin);
     const endChina = new Date(dateObj);
     endChina.setHours(endHour + 7, endMin);
 
-    // Create course
-    const courseData = {
-      ...req.body,
+    // Prepare course data for creation
+    const courseToCreate = {
+      ...courseData,
       startTimeChina: startChina.toTimeString().slice(0, 5),
       endTimeChina: endChina.toTimeString().slice(0, 5),
     };
 
-    const course = await LiveCourse.create(courseData);
+    // Create live course
+    const course = await LiveCourse.create(courseToCreate);
+    console.log(`✅ Live course created: ${course.courseName} (ID: ${course._id})`);
 
-    // Fetch selected students emails
-    if (selectedStudents && selectedStudents.length > 0) {
-      const students = await User.find({ _id: { $in: selectedStudents } });
+    // Notify selected students
+    const validStudentIds = (selectedStudents || []).filter((sid) =>
+      mongoose.Types.ObjectId.isValid(sid)
+    );
 
-      // Send email to all students (sequentially, you can also parallelize if needed)
-      for (const student of students) {
-        const { text, html } = liveCourseEmailContent(student, course);
-        await sendEmail({
-          to: student.email,
-          subject: `Nouveau cours en direct: ${course.courseName}`,
-          text,
-          html,
-        });
-      }
+    if (validStudentIds.length > 0) {
+      const students = await User.find({ _id: { $in: validStudentIds } });
+      await Promise.all(
+        students.map(async (student) => {
+          const { text, html } = liveCourseEmailContent(student, course);
+          await sendEmail({
+            to: student.email,
+            subject: `Nouveau cours en direct: ${course.courseName}`,
+            text,
+            html,
+          });
+          console.log(`✅ Email sent to student: ${student.name} (${student.email})`);
+        })
+      );
+    } else {
+      console.log("ℹ️ No valid students selected for this course");
     }
 
-    res.status(201).json({ message: "Live course created and students notified", course });
+    // Notify instructor
+    const instructor = await User.findOne({
+      name: { $regex: `^${instructorName.trim()}$`, $options: "i" },
+      role: "enseignant",
+    });
+
+    if (instructor) {
+      const { text, html } = liveCourseInstructorEmailContent(instructor, course);
+      await sendEmail({
+        to: instructor.email,
+        subject: `您是该课程的讲师: ${course.courseName}`,
+        text,
+        html,
+      });
+      console.log(`✅ Email sent to instructor: ${instructor.name} (${instructor.email})`);
+    } else {
+      console.warn(`⚠️ Instructor with name "${instructorName}" not found`);
+    }
+
+    // Respond with created course
+    res.status(201).json({
+      message: "Live course created, students and instructor notified",
+      course,
+    });
   } catch (error) {
-    console.error("Add live course error:", error);
+    console.error("❌ Add live course error:", error);
     res.status(500).json({ error: error.message });
   }
 };

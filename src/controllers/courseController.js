@@ -3,12 +3,70 @@ import Course from "../models/courseModel.js";
 // Create course
 export const addCourse = async (req, res) => {
   try {
-    const course = await Course.create(req.body);
-    res.status(201).json(course);
+    console.log('🎯 addCourse controller called');
+    console.log('📋 req.body:', req.body);
+    console.log('📎 req.file:', req.file ? {
+      fieldname: req.file.fieldname,
+      originalname: req.file.originalname,
+      encoding: req.file.encoding,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+      destination: req.file.destination,
+      filename: req.file.filename,
+      path: req.file.path
+    } : 'No file received');
+
+    if (!req.file) {
+      console.log('❌ No file in request');
+      return res.status(400).json({ error: "Veuillez télécharger un fichier vidéo" });
+    }
+
+    let { selectedStudents, ...courseData } = req.body;
+
+    // Parse selectedStudents if needed
+    if (selectedStudents && typeof selectedStudents === 'string') {
+      try {
+        selectedStudents = JSON.parse(selectedStudents);
+        console.log('✅ Parsed selectedStudents:', selectedStudents);
+      } catch (parseError) {
+        console.log('⚠️ Failed to parse selectedStudents:', parseError);
+        selectedStudents = [];
+      }
+    }
+
+    // Add video info
+    courseData.videoFile = `/uploads/${req.file.filename}`;
+    courseData.videoFileSize = req.file.size;
+    courseData.videoFileOriginalName = req.file.originalname;
+    courseData.videoFileMimetype = req.file.mimetype;
+    courseData.selectedStudents = selectedStudents || [];
+
+    console.log('💾 Data to save:', courseData);
+
+    const course = await Course.create(courseData);
+    console.log('✅ Course created successfully:', course._id);
+
+    return res.status(201).json(course);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('❌ Error creating course:', error);
+    console.error('Error stack:', error.stack);
+    
+    // More specific error handling
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ 
+        error: 'Validation Error', 
+        details: Object.values(error.errors).map(err => err.message) 
+      });
+    }
+    
+    if (error.code === 11000) {
+      return res.status(400).json({ error: 'Duplicate entry' });
+    }
+
+    return res.status(500).json({ error: error.message });
   }
 };
+
 
 // Get single course
 export const getCourse = async (req, res) => {

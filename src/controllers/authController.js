@@ -7,18 +7,33 @@ import {
   verifyRefreshToken,
 } from "../utils/jwt.js";
 import { sendEmail } from "../utils/sendEmail.js";
+import { defaultUserEmailContent,enseignantEmailContent } from "../utils/emailTemplates.js";
 
 /**
  * Helper: shape user for client
  */
-const sanitizeUser = (user) => ({
-  id: user._id,
-  name: user.name,
-  email: user.email,
-  role: user.role,
-  createdAt: user.createdAt,
-  updatedAt: user.updatedAt,
-});
+export const sanitizeUser = (user) => {
+  return {
+    id: user._id.toString(),
+    firstName: user.firstName,      // 🔹 Ajouter
+    lastName: user.lastName,        // 🔹 Ajouter
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    formValidated: user.formValidated,
+    accessValidated: user.accessValidated,
+    telNumber: user.telNumber || null,
+    address: user.address || null,
+    dateOfBirth: user.dateOfBirth || null,
+    gender: user.gender || null,
+    motivation: user.motivation || null,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+    photoId: user.photoId,
+    receipt: user.receipt,
+  }
+}
+
 
 /**
  * Helper: set refresh token cookie with env-aware options
@@ -134,83 +149,20 @@ export const register = async (req, res) => {
 await user.save();
 
 
-    // 5️⃣ Send email with credentials
-    await sendEmail({
-      to: user.email,
-      subject: "Bienvenue sur notre plateforme !",
-      text: `
-    Bonjour ${user.name},
-    
-    Nous sommes ravis de vous accueillir sur notre plateforme !
-    
-    Votre compte a été créé avec succès. Voici vos identifiants pour vous connecter et commencer à explorer nos ressources :
-    
-    Email : ${user.email}
-    Mot de passe : ${generatedPassword}
-    
-    Nous vous souhaitons une excellente expérience parmi nous. N'hésitez pas à vous connecter dès maintenant et à découvrir tout ce que notre plateforme a à offrir !
-    
-    Merci de votre confiance,
-    L'équipe de la plateforme
-      `,
-      html: `
-      <div style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">
-        <div style="max-width: 600px; margin: auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); padding: 30px;">
-          <h2 style="color: #2F80ED; font-size: 24px; margin-bottom: 20px;">Bienvenue ${user.name} ! 🎉</h2>
-          <p style="font-size: 16px; color: #333333; line-height: 1.5;">
-            Nous sommes ravis de vous accueillir sur notre plateforme. Votre compte a été créé avec succès.
-          </p>
+      let emailContent;
+      if (role === "enseignant") {
+        emailContent = enseignantEmailContent(user, generatedPassword);
+      } else {
+        emailContent = defaultUserEmailContent(user, generatedPassword);
+      }
+
+      await sendEmail({
+        to: user.email,
+        subject: emailContent.subject,
+        text: emailContent.text,
+        html: emailContent.html,
+      });
           
-          <table style="width: 100%; margin: 20px 0; border-collapse: collapse;">
-            <tr>
-              <td style="font-weight: bold; padding: 8px; background-color: #f2f2f2; width: 120px;">Email :</td>
-              <td style="padding: 8px;">${user.email}</td>
-            </tr>
-            <tr>
-              <td style="font-weight: bold; padding: 8px; background-color: #f2f2f2;">Mot de passe :</td>
-              <td style="padding: 8px;">${generatedPassword}</td>
-            </tr>
-          </table>
-    
-          <p style="font-size: 16px; color: #333333; line-height: 1.5;">
-            Nous vous invitons à vous connecter dès maintenant pour commencer votre expérience et découvrir tout ce que notre plateforme a à offrir.
-          </p>
-    
-          <a href="https://ta-plateforme.com/login" 
-             style="display: inline-block; padding: 12px 20px; margin: 20px 0; background-color: #2F80ED; color: #fff; text-decoration: none; border-radius: 6px; font-weight: bold;">
-            Se connecter à la plateforme
-          </a>
-    
-          <p style="font-size: 16px; color: #333333;">
-            Merci de votre confiance,<br/>
-            <strong>L'équipe de la plateforme</strong>
-          </p>
-    
-          <p style="margin-top: 30px; font-size: 12px; color: #999;">
-            Ceci est un email automatique, merci de ne pas répondre.
-          </p>
-        </div>
-      </div>
-    
-      <!-- Responsive styles -->
-      <style>
-        @media only screen and (max-width: 600px) {
-          div[style*="max-width: 600px"] {
-            width: 100% !important;
-            padding: 20px !important;
-          }
-          h2 {
-            font-size: 20px !important;
-          }
-          p, a {
-            font-size: 16px !important;
-          }
-        }
-      </style>
-      `,
-    });
-    
-    
 
     const accessToken = signAccessToken({ id: user._id });
     const refreshToken = signRefreshToken({ id: user._id });
@@ -226,20 +178,260 @@ await user.save();
   }
 };
 
+// 🔹 1️⃣ Fetch all users
+export const getAllUsers = async (req, res) => {
+  try {
+    const users = await User.find().select("-password -passwordResetTokenHash -passwordResetExpiresAt");
+    const sanitizedUsers = users.map(sanitizeUser);
+    res.json({ count: sanitizedUsers.length, users: sanitizedUsers });
+  } catch (err) {
+    console.error("getAllUsers error:", err);
+    res.status(500).json({ error: "Could not fetch users" });
+  }
+};
+
+// 🔹 2️⃣ Fetch only students
+export const getStudents = async (req, res) => {
+  try {
+    const students = await User.find({
+      role: "etudiant",
+      // Exclure uniquement les docs où formValidated ∈ {false,"false",0}
+      // ET accessValidated ∈ {false,"false",0} (les deux à la fois)
+      $nor: [
+        {
+          $and: [
+            { formValidated: { $in: [false, "false", 0, "0"] } },
+            { accessValidated: { $in: [false, "false", 0, "0"] } },
+          ],
+        },
+      ],
+    })
+      .select("-password -passwordResetTokenHash -passwordResetExpiresAt")
+      .lean();
+
+    const sanitizedStudents = students.map(sanitizeUser);
+    res.json({ count: sanitizedStudents.length, students: sanitizedStudents });
+  } catch (err) {
+    console.error("getStudents error:", err);
+    res.status(500).json({ error: "Could not fetch students" });
+  }
+};
+;
+
+
+
+
+export const getStudentsNotVerified = async (req, res) => {
+  try {
+    const students = await User.find({
+      role: "etudiant",
+   
+    }).select("-password -passwordResetTokenHash -passwordResetExpiresAt");
+
+    const sanitizedStudents = students.map(sanitizeUser);
+    res.json({ count: sanitizedStudents.length, students: sanitizedStudents });
+  } catch (err) {
+    console.error("getStudents error:", err);
+    res.status(500).json({ error: "Could not fetch students" });
+  }
+};
+
+export const validateUserAccess = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Check if user exists
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Update access validation status
+    user.accessValidated = true;
+    await user.save();
+
+    // Send confirmation email
+    await sendEmail({
+      to: user.email,
+      subject: "🎉 Inscription validée - Accès autorisé",
+      text: `Bonjour ${user.firstName || user.name},\n\nFélicitations ! Votre inscription a été validée et vous pouvez maintenant accéder à la plateforme.`,
+      html: `
+        <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #f9f9f9;">
+          <div style="max-width: 600px; margin: 0 auto; background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+            <div style="text-align: center; margin-bottom: 30px;">
+              <h1 style="color: #22c55e; margin: 0;">🎉 Inscription Validée !</h1>
+            </div>
+            
+            <h2 style="color: #333;">Bonjour ${user.firstName || user.name},</h2>
+            
+            <div style="background-color: #dcfce7; border-left: 4px solid #22c55e; padding: 15px; margin: 20px 0; border-radius: 5px;">
+              <p style="margin: 0; color: #166534; font-weight: bold;">
+                ✅ Félicitations ! Votre inscription a été validée avec succès.
+              </p>
+            </div>
+            
+            <p style="color: #555; line-height: 1.6;">
+              Nous avons le plaisir de vous confirmer que votre dossier d'inscription a été examiné et approuvé par notre équipe.
+            </p>
+            
+            <p style="color: #555; line-height: 1.6;">
+              <strong>Vous pouvez maintenant accéder à la plateforme</strong> avec vos identifiants de connexion.
+            </p>
+            
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${process.env.FRONTEND_URL || 'http://localhost:3000/'}/auth" 
+                 style="background-color: #22c55e; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
+                Se connecter à la plateforme
+              </a>
+            </div>
+            
+            <hr style="border: none; height: 1px; background-color: #e5e5e5; margin: 30px 0;">
+            
+            <p style="color: #666; font-size: 14px;">
+              Si vous avez des questions, n'hésitez pas à nous contacter à l'adresse : 
+            </p>
+            
+            <div style="text-align: center; margin-top: 30px;">
+              <p style="color: #888; font-size: 14px; margin: 0;">
+                Merci de votre confiance,<br/>
+                <strong style="color: #333;">L'équipe de la plateforme</strong>
+              </p>
+            </div>
+          </div>
+        </div>
+      `
+    });
+
+    return res.status(200).json({
+      message: "User access validated successfully. Confirmation email sent.",
+      user: {
+        id: user._id,
+        email: user.email,
+        name: user.name,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        accessValidated: user.accessValidated,
+      }
+    });
+
+  } catch (err) {
+    console.error("User validation error:", err);
+    return res.status(500).json({ error: "User validation failed" });
+  }
+};
+
+
+
+
+export const registerForm = async (req, res) => {
+  try {
+    console.log("🚀 registerForm started");
+
+    const { id } = req.params;
+    const { email, dateOfBirth, gender, address, motivation } = req.body;
+
+    // Check if user exists
+    const user = await User.findById(id);
+    if (!user) {
+      console.log("❌ User not found with ID:", id);
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    console.log("✅ User found:", { id: user._id, email: user.email, name: user.name });
+
+    // Handle file uploads
+    if (req.files) {
+      if (req.files.receipt?.[0]) {
+        user.receipt = `/uploads/${req.files.receipt[0].filename}`;
+        console.log("💳 Receipt uploaded:", user.receipt);
+      }
+      if (req.files.photoId?.[0]) {
+        user.photoId = `/uploads/${req.files.photoId[0].filename}`;
+        console.log("🆔 Photo ID uploaded:", user.photoId);
+      }
+    }
+
+    // Update user data
+    user.email = email || user.email;
+    user.dateOfBirth = dateOfBirth || user.dateOfBirth;
+    user.gender = gender || user.gender;
+    user.address = address || user.address;
+    user.motivation = motivation || user.motivation;
+
+    // Mark form as completed
+    user.formValidated = true;
+    user.accessValidated = false;
+
+    await user.save();
+    console.log("✅ User saved successfully");
+
+    // Send confirmation email
+    await sendEmail({
+      to: user.email,
+      subject: "Confirmation de votre inscription",
+      text: `Bonjour ${user.firstName || user.name},\n\nVotre formulaire est bien reçu et en attente de validation.`,
+      html: `
+        <div style="font-family: Arial, sans-serif; padding: 20px;">
+          <h2>Bonjour ${user.firstName || user.name},</h2>
+          <p>Nous avons bien reçu vos informations d'inscription ainsi que vos documents.</p>
+          <p>✅ Votre dossier est maintenant en attente de validation par notre équipe.</p>
+          <p>Vous recevrez un email de confirmation une fois que votre inscription aura été validée.</p>
+          <br/>
+          <p>Merci de votre confiance,<br/><strong>L'équipe de la plateforme</strong></p>
+        </div>
+      `
+    });
+    console.log("📧 Confirmation email sent");
+
+    // Generate tokens
+    const accessToken = signAccessToken({ id: user._id });
+    const refreshToken = signRefreshToken({ id: user._id });
+    setRefreshCookie(res, refreshToken);
+    console.log("🔐 Tokens generated");
+
+    return res.status(200).json({
+      message: "Registration data updated successfully. Confirmation email sent.",
+      user: {
+        id: user._id,
+        email: user.email,
+        name: user.name,
+        dateOfBirth: user.dateOfBirth,
+        gender: user.gender,
+        address: user.address,
+        motivation: user.motivation,
+        receiptUrl: user.receiptUrl || null,
+        photoIdUrl: user.photoIdUrl || null,
+        formValidated: user.formValidated,
+        accessValidated: user.accessValidated,
+      },
+      accessToken,
+    });
+  } catch (err) {
+    console.error("❌ registerForm error:", err);
+    return res.status(500).json({ error: "Registration update failed" });
+  }
+};
+
+
 /**
  * POST /auth/login
  */
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password)
-      return res.status(400).json({ error: "email and password required" });
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password required" });
+    }
 
     const user = await User.findOne({ email }).select("+password");
-    if (!user) return res.status(401).json({ error: "Invalid credentials" });
+    if (!user) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
 
     const correct = await user.correctPassword(password, user.password);
-    if (!correct) return res.status(401).json({ error: "Invalid credentials" });
+    if (!correct) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
 
     const accessToken = signAccessToken({ id: user._id });
     const refreshToken = signRefreshToken({ id: user._id });
@@ -247,13 +439,15 @@ export const login = async (req, res) => {
     setRefreshCookie(res, refreshToken);
 
     return res.json({
-      user: sanitizeUser(user),
       accessToken,
+      user: sanitizeUser(user), // 👈 inclut maintenant role, formValidated, accessValidated
     });
   } catch (err) {
+    console.error("Login error:", err);
     return res.status(500).json({ error: "Login failed" });
   }
 };
+
 
 /**
  * POST /auth/refresh
